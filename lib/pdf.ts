@@ -5,7 +5,6 @@ import { DiaTecnico, classificarPerfil } from "@/lib/rewards";
 const PREMIO_META = 35;
 const META_DIARIA = 4;
 
-// Cores RGB
 const CORES = {
   azulEscuro: [26, 26, 46] as [number, number, number],
   azulDIGI: [0, 30, 255] as [number, number, number],
@@ -24,14 +23,28 @@ const CORES = {
   branco: [255, 255, 255] as [number, number, number],
 };
 
-// Remove emojis e caracteres não suportados pela fonte padrão
+// Remove emojis que o jsPDF nao suporta
 function limparTexto(texto: string): string {
   return texto
-    .replace(/[\u{1F300}-\u{1FAFF}]/gu, "") // emojis
-    .replace(/[\u{2600}-\u{27BF}]/gu, "")   // símbolos diversos
-    .replace(/[\u{1F000}-\u{1F2FF}]/gu, "") // mais emojis
-    .replace(/\s+/g, " ")
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
+    .replace(/[\u{2600}-\u{27BF}]/gu, "")
+    .replace(/[\u{1F000}-\u{1F2FF}]/gu, "")
     .trim();
+}
+
+// Quebra texto em paragrafos (por \n\n) e depois em linhas
+function dividirEmParagrafos(
+  texto: string,
+  pdf: jsPDF,
+  larguraMaxima: number
+): string[][] {
+  const limpo = limparTexto(texto);
+  const paragrafos = limpo.split(/\n\n+/);
+  return paragrafos.map((p) => {
+    const linhaUnica = p.replace(/\n/g, " ").trim();
+    if (!linhaUnica) return [];
+    return pdf.splitTextToSize(linhaUnica, larguraMaxima) as string[];
+  });
 }
 
 export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
@@ -65,7 +78,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   let mesReferencia = "";
   if (historico.length > 0) {
     const meses = [
-      "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+      "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
       "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
     ];
     const [ano, mes] = historico[0].data.split("-");
@@ -78,7 +91,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
 
-  // ============ CABEÇALHO ============
+  // ============ CABECALHO ============
   pdf.setFillColor(...CORES.azulEscuro);
   pdf.rect(0, 0, pageWidth, 32, "F");
 
@@ -95,7 +108,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   pdf.setLineWidth(0.5);
   pdf.line(margin, 27, margin + 40, 27);
 
-  // ============ NOME DO TÉCNICO ============
+  // ============ NOME DO TECNICO ============
   let y = 45;
 
   pdf.setTextColor(...CORES.cinzaTexto);
@@ -133,7 +146,6 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
 
   y = y + 14;
 
-  // Grid 4 colunas compacto
   const resumo = [
     { label: "Dias Trabalhados", valor: historico.length, cor: CORES.azulDIGI },
     { label: "Dias Premiados", valor: diasPremiados, cor: CORES.verde },
@@ -144,10 +156,8 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   const boxWidth = (contentWidth - 9) / 4;
   resumo.forEach((item, i) => {
     const x = margin + i * (boxWidth + 3);
-
     pdf.setFillColor(...CORES.azulClaro);
     pdf.roundedRect(x, y, boxWidth, 20, 1.5, 1.5, "F");
-
     pdf.setFillColor(...item.cor);
     pdf.rect(x, y, boxWidth, 1.2, "F");
 
@@ -164,7 +174,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
     });
   });
 
-  // ============ PRÉMIO TOTAL ============
+  // ============ PREMIO TOTAL ============
   y = y + 26;
   pdf.setFillColor(...CORES.verdeFundo);
   pdf.roundedRect(margin, y, contentWidth, 14, 2, 2, "F");
@@ -183,7 +193,6 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   y = y + 18;
   pdf.setFillColor(...CORES.ambarFundo);
   pdf.roundedRect(margin, y, contentWidth, 16, 2, 2, "F");
-
   pdf.setFillColor(...CORES.ambar);
   pdf.rect(margin, y, 1.5, 16, "F");
 
@@ -204,7 +213,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
     { align: "right" }
   );
 
-  // ============ DISTRIBUIÇÃO POR FAIXA ============
+  // ============ DISTRIBUICAO POR FAIXA ============
   y = y + 24;
   pdf.setTextColor(...CORES.azulEscuro);
   pdf.setFontSize(10);
@@ -222,10 +231,8 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
   const faixaWidth = (contentWidth - 9) / 4;
   faixas.forEach((faixa, i) => {
     const x = margin + i * (faixaWidth + 3);
-
     pdf.setFillColor(...CORES.azulClaro);
     pdf.roundedRect(x, y, faixaWidth, 14, 1.5, 1.5, "F");
-
     pdf.setFillColor(...faixa.cor);
     pdf.rect(x, y, 1.5, 14, "F");
 
@@ -249,53 +256,86 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
 
   y = y + 5;
 
-  // Preparar textos limpos
+  // Preparar textos
   const tituloLimpo = limparTexto(perfil.titulo);
-  const mensagemLimpa = limparTexto(perfil.mensagem);
   const lemaLimpo = limparTexto(perfil.lema);
 
-  // Calcular altura necessária
-  const tituloLines = pdf.splitTextToSize(tituloLimpo, contentWidth - 12);
+  // Processar mensagem em paragrafos
   pdf.setFontSize(8.5);
-  const mensagemLines = pdf.splitTextToSize(mensagemLimpa, contentWidth - 12);
+  const paragrafos = dividirEmParagrafos(
+    perfil.mensagem,
+    pdf,
+    contentWidth - 12
+  );
+
+  // Calcular altura total do bloco
+  const alturaLinha = 4;
+  const espacoParagrafo = 3;
+  const alturaTitulo = 6;
+  let alturaParagrafos = 0;
+  paragrafos.forEach((linhas) => {
+    if (linhas.length > 0) {
+      alturaParagrafos += linhas.length * alturaLinha + espacoParagrafo;
+    }
+  });
+
+  const tituloLines = pdf.splitTextToSize(tituloLimpo, contentWidth - 12);
+  const alturaTituloReal = tituloLines.length * 4.5;
+
   pdf.setFontSize(9);
   const lemaLines = pdf.splitTextToSize(lemaLimpo, contentWidth - 20);
-
-  const alturaTitulo = tituloLines.length * 4.5;
-  const alturaMensagem = mensagemLines.length * 4;
   const alturaLema = lemaLines.length * 4.5 + 8;
-  const alturaTotal = alturaTitulo + alturaMensagem + alturaLema + 14;
 
-  // Bloco único da mensagem + lema
+  const alturaBloco =
+    alturaTituloReal + alturaParagrafos + alturaLema + 14;
+
+  // Bloco fundo claro
   pdf.setFillColor(...CORES.azulClaro);
-  pdf.roundedRect(margin, y, contentWidth, alturaTotal, 2, 2, "F");
+  pdf.roundedRect(margin, y, contentWidth, alturaBloco, 2, 2, "F");
 
   pdf.setFillColor(...CORES.azulDIGI);
-  pdf.rect(margin, y, 1.5, alturaTotal, "F");
+  pdf.rect(margin, y, 1.5, alturaBloco, "F");
 
-  // Título
+  // Titulo
   pdf.setTextColor(...CORES.azulDIGI);
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "bold");
   pdf.text(tituloLines, margin + 6, y + 6);
 
-  // Mensagem
+  // Paragrafos (cada um separado)
+  let cursorY = y + 6 + alturaTituloReal + 2;
   pdf.setTextColor(50, 50, 50);
   pdf.setFontSize(8.5);
   pdf.setFont("helvetica", "normal");
-  pdf.text(mensagemLines, margin + 6, y + 6 + alturaTitulo + 3);
 
-  // Lema (destaque)
-  const lemaY = y + 6 + alturaTitulo + alturaMensagem + 6;
+  paragrafos.forEach((linhas) => {
+    if (linhas.length === 0) {
+      cursorY += espacoParagrafo;
+      return;
+    }
+    pdf.text(linhas, margin + 6, cursorY);
+    cursorY += linhas.length * alturaLinha + espacoParagrafo;
+  });
+
+  // Lema destacado
+  const lemaY = cursorY + 2;
   pdf.setFillColor(...CORES.azulEscuro);
-  pdf.roundedRect(margin + 4, lemaY - 4, contentWidth - 8, alturaLema, 1.5, 1.5, "F");
+  pdf.roundedRect(
+    margin + 4,
+    lemaY - 4,
+    contentWidth - 8,
+    alturaLema,
+    1.5,
+    1.5,
+    "F"
+  );
 
   pdf.setTextColor(...CORES.branco);
   pdf.setFontSize(8.5);
   pdf.setFont("helvetica", "bolditalic");
   pdf.text(lemaLines, margin + 9, lemaY + 2);
 
-  // ============ HISTÓRICO DIÁRIO (nova página) ============
+  // ============ HISTORICO DIARIO (nova pagina) ============
   pdf.addPage();
   y = 20;
 
@@ -376,7 +416,7 @@ export function exportarTecnicoPDF(tecnico: string, dias: DiaTecnico[]) {
     },
   });
 
-  // ============ RODAPÉ ============
+  // ============ RODAPE ============
   const totalPaginas = pdf.getNumberOfPages();
   const dataGeracao = new Date().toLocaleDateString("pt-PT");
 

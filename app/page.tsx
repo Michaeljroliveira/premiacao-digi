@@ -19,6 +19,8 @@ import {
   ResumoTecnico,
 } from "@/lib/rewards";
 
+import { gerarResumoSupervisor } from "@/lib/supervisores";
+
 export default function Home() {
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [dados, setDados] = useState<any[]>([]);
@@ -27,7 +29,10 @@ export default function Home() {
   const [diasTecnicos, setDiasTecnicos] = useState<DiaTecnico[]>([]);
   const [estatisticas, setEstatisticas] = useState<any>(null);
   const [erro, setErro] = useState("");
-  const [tecnicoSelecionado, setTecnicoSelecionado] = useState<string | null>(null);
+  const [tecnicoSelecionado, setTecnicoSelecionado] = useState<string | null>(
+    null
+  );
+  const [isSupervisor, setIsSupervisor] = useState(false);
   const [drawerAberto, setDrawerAberto] = useState(false);
 
   async function carregar(file: File) {
@@ -44,8 +49,6 @@ export default function Home() {
         setTecnicos([]);
         setDiasTecnicos([]);
         setEstatisticas(null);
-        setDrawerAberto(false);
-        setTecnicoSelecionado(null);
         return;
       }
 
@@ -56,8 +59,28 @@ export default function Home() {
       setResumo(resultado);
 
       const premiacao = gerarResumoTecnicos(resultado.dadosValidos);
-      setTecnicos(premiacao.resumoTecnicos);
       setDiasTecnicos(premiacao.diasTecnicos);
+
+      // Calcular resumo do supervisor (bónus de supervisão)
+      const resumoSupervisor = gerarResumoSupervisor("Supervisor", premiacao.diasTecnicos);
+
+      // Criar linha do supervisor como se fosse mais um "técnico"
+      const linhaSupervisor: ResumoTecnico & {
+        isSupervisor: boolean;
+        bonusSupervisor: number;
+      } = {
+        tecnico: "SUPERVISOR",
+        diasTrabalhados: new Set(premiacao.diasTecnicos.map((d) => d.data)).size,
+        diasComPremio: resumoSupervisor.tecnicosProdutivos,
+        diasSemPremio: 0,
+        instalacoes: resumoSupervisor.instalacoesTotais,
+        premioTotal: resumoSupervisor.bonus,
+        potencialAdicional: 0,
+        isSupervisor: true,
+        bonusSupervisor: resumoSupervisor.bonus,
+      } as any;
+
+      setTecnicos([linhaSupervisor, ...premiacao.resumoTecnicos]);
 
       setEstatisticas(
         calcularEstatisticasGerais(premiacao.resumoTecnicos)
@@ -70,8 +93,6 @@ export default function Home() {
       setTecnicos([]);
       setDiasTecnicos([]);
       setEstatisticas(null);
-      setDrawerAberto(false);
-      setTecnicoSelecionado(null);
     }
   }
 
@@ -117,8 +138,9 @@ export default function Home() {
         {tecnicos.length > 0 && (
           <TabelaTecnicos
             tecnicos={tecnicos}
-            onSelecionar={(tecnico) => {
+            onSelecionar={(tecnico, isSup) => {
               setTecnicoSelecionado(tecnico);
+              setIsSupervisor(isSup);
               setDrawerAberto(true);
             }}
           />
@@ -129,9 +151,11 @@ export default function Home() {
         aberto={drawerAberto}
         tecnico={tecnicoSelecionado}
         dias={diasTecnicos}
+        isSupervisor={isSupervisor}
         onFechar={() => {
           setDrawerAberto(false);
           setTecnicoSelecionado(null);
+          setIsSupervisor(false);
         }}
       />
     </main>

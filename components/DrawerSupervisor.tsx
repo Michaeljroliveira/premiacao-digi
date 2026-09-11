@@ -21,31 +21,6 @@ export default function DrawerSupervisor({
 
   const resumo = gerarResumoSupervisor(nome, dias);
 
-  // Ranking interno
-  const tecnicosMap = new Map<string, { instalacoes: number; dias: number }>();
-  for (const dia of dias) {
-    if (!tecnicosMap.has(dia.tecnico)) {
-      tecnicosMap.set(dia.tecnico, { instalacoes: 0, dias: 0 });
-    }
-    const t = tecnicosMap.get(dia.tecnico)!;
-    t.instalacoes += dia.instalacoes;
-    t.dias += 1;
-  }
-
-  const ranking = Array.from(tecnicosMap.entries())
-    .map(([email, dados]) => ({
-      email,
-      nome: email
-        .split("@")[0]
-        .replace(/\./g, " ")
-        .split(" ")
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(" "),
-      ...dados,
-      produtivo: dados.dias >= 12,
-    }))
-    .sort((a, b) => b.instalacoes - a.instalacoes);
-
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onFechar} />
@@ -82,10 +57,15 @@ export default function DrawerSupervisor({
               </p>
             </div>
             <div className="rounded-xl bg-green-50 p-4">
-              <p className="text-gray-500 text-sm">Instalações Totais</p>
+              <p className="text-gray-500 text-sm">Instalações Válidas</p>
               <h2 className="text-3xl font-bold text-green-700">
                 {resumo.instalacoesTotais}
               </h2>
+              {resumo.instalacoesExcluidas > 0 && (
+                <p className="text-xs text-red-500 mt-1">
+                  ⚠️ {resumo.instalacoesExcluidas} excluídas
+                </p>
+              )}
             </div>
             <div className="rounded-xl bg-amber-50 p-4">
               <p className="text-gray-500 text-sm">Patamar Atingido</p>
@@ -100,6 +80,18 @@ export default function DrawerSupervisor({
               </h2>
             </div>
           </div>
+
+          {/* Aviso de exclusão */}
+          {resumo.instalacoesExcluidas > 0 && (
+            <div className="mt-4 rounded-lg bg-red-50 border-l-4 border-red-500 p-3">
+              <p className="text-xs text-red-800">
+                ⚠️ <b>{resumo.tecnicosTotais - resumo.tecnicosProdutivos} técnico(s)</b>{" "}
+                com menos de 12 dias trabalhados foram excluídos do cálculo.
+                As suas <b>{resumo.instalacoesExcluidas} instalações</b> não
+                contam para o bónus.
+              </p>
+            </div>
+          )}
 
           {/* Barra de progresso */}
           <div className="mt-6">
@@ -186,11 +178,15 @@ export default function DrawerSupervisor({
 
           {/* Ranking interno */}
           <div className="mt-8">
-            <h3 className="text-xl font-bold mb-4">
-              Ranking da Equipa ({ranking.length} técnicos)
+            <h3 className="text-xl font-bold mb-2">
+              Ranking da Equipa ({resumo.rankingInterno.length} técnicos)
             </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Só técnicos com ≥12 dias contam para o bónus
+            </p>
+
             <div className="space-y-2">
-              {ranking.map((t, i) => (
+              {resumo.rankingInterno.map((t, i) => (
                 <div
                   key={t.email}
                   className={`flex justify-between items-center p-3 rounded-lg border ${
@@ -204,7 +200,11 @@ export default function DrawerSupervisor({
                       {i + 1}
                     </span>
                     <div>
-                      <p className="font-semibold text-sm text-[#001EFF]">
+                      <p
+                        className={`font-semibold text-sm ${
+                          t.produtivo ? "text-[#001EFF]" : "text-red-700"
+                        }`}
+                      >
                         {t.nome}
                       </p>
                       <p className="text-xs text-gray-500">
@@ -219,7 +219,7 @@ export default function DrawerSupervisor({
                         : "bg-red-100 text-red-700"
                     }`}
                   >
-                    {t.produtivo ? "Produtivo" : "Não produtivo"}
+                    {t.produtivo ? "✓ Produtivo" : "⚠️ Não conta"}
                   </span>
                 </div>
               ))}

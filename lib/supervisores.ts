@@ -53,30 +53,70 @@ export const TABELAS_SUPERVISOR: TabelaPatamares[] = [
   },
 ];
 
+// ============ TIPOS ============
+export interface TecnicoInfo {
+  email: string;
+  nome: string;
+  dias: number;
+  instalacoes: number;
+  produtivo: boolean;
+}
+
+export interface ResumoSupervisor {
+  nome: string;
+  tecnicosProdutivos: number;
+  tecnicosTotais: number;
+  instalacoesTotais: number; // Só de produtivos
+  instalacoesExcluidas: number; // Dos não produtivos (para transparência)
+  bonus: number;
+  patamarAtingido: number;
+  proximoPatamar: { instalacoes: number; bonus: number } | null;
+  faltamProximo: number;
+  progresso: number;
+  tabelaAplicada: string;
+  patamares: { instalacoes: number; bonus: number }[];
+  rankingInterno: TecnicoInfo[];
+}
+
 // ============ CÁLCULOS ============
 
 /**
- * Conta técnicos produtivos (≥12 dias únicos com instalações)
- * Recebe a lista de dias-técnico e devolve a contagem de técnicos produtivos
+ * Analisa cada técnico individualmente: dias trabalhados, instalações e se é produtivo
  */
-export function contarTecnicosProdutivos(dias: DiaTecnico[]): number {
-  const diasPorTecnico = new Map<string, Set<string>>();
+export function analisarTecnicos(dias: DiaTecnico[]): TecnicoInfo[] {
+  const mapa = new Map<
+    string,
+    { dias: Set<string>; instalacoes: number }
+  >();
 
   for (const dia of dias) {
-    if (!diasPorTecnico.has(dia.tecnico)) {
-      diasPorTecnico.set(dia.tecnico, new Set());
+    if (!mapa.has(dia.tecnico)) {
+      mapa.set(dia.tecnico, { dias: new Set(), instalacoes: 0 });
     }
-    diasPorTecnico.get(dia.tecnico)!.add(dia.data);
+    const info = mapa.get(dia.tecnico)!;
+    info.dias.add(dia.data);
+    info.instalacoes += dia.instalacoes;
   }
 
-  let produtivos = 0;
-  for (const [, dias] of diasPorTecnico.entries()) {
-    if (dias.size >= MIN_DIAS_PRODUTIVO) {
-      produtivos++;
-    }
+  const resultado: TecnicoInfo[] = [];
+  for (const [email, info] of mapa.entries()) {
+    const nome = email
+      .split("@")[0]
+      .replace(/\./g, " ")
+      .split(" ")
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ");
+
+    resultado.push({
+      email,
+      nome,
+      dias: info.dias.size,
+      instalacoes: info.instalacoes,
+      produtivo: info.dias.size >= MIN_DIAS_PRODUTIVO,
+    });
   }
 
-  return produtivos;
+  return resultado.sort((a, b) => b.instalacoes - a.instalacoes);
 }
 
 /**
@@ -96,7 +136,7 @@ export function identificarTabela(tecnicosProdutivos: number): TabelaPatamares {
 
 /**
  * Calcula o bónus do supervisor com base nas instalações totais
- * e no número de técnicos produtivos
+ * (já filtradas só dos produtivos) e no número de técnicos produtivos
  */
 export function calcularBonusSupervisor(
   instalacoesTotais: number,
@@ -104,10 +144,10 @@ export function calcularBonusSupervisor(
 ): {
   tabela: TabelaPatamares;
   bonus: number;
-  patamarAtingido: number; // 0, 1, 2, 3
+  patamarAtingido: number;
   proximoPatamar: { instalacoes: number; bonus: number } | null;
   faltamProximo: number;
-  progresso: number; // 0-100%
+  progresso: number;
 } {
   const tabela = identificarTabela(tecnicosProdutivos);
 
@@ -122,7 +162,6 @@ export function calcularBonusSupervisor(
     }
   }
 
-  // Próximo patamar
   let proximoPatamar: { instalacoes: number; bonus: number } | null = null;
   let faltamProximo = 0;
 
@@ -131,7 +170,6 @@ export function calcularBonusSupervisor(
     faltamProximo = proximoPatamar.instalacoes - instalacoesTotais;
   }
 
-  // Progresso em relação ao próximo patamar (ou 100% se atingiu o último)
   let progresso = 0;
   if (patamarAtingido === 0) {
     progresso = (instalacoesTotais / tabela.patamares[0].instalacoes) * 100;
@@ -155,46 +193,46 @@ export function calcularBonusSupervisor(
 }
 
 /**
- * Interface do resultado consolidado do supervisor
- */
-export interface ResumoSupervisor {
-  nome: string;
-  tecnicosProdutivos: number;
-  tecnicosTotais: number;
-  instalacoesTotais: number;
-  bonus: number;
-  patamarAtingido: number;
-  proximoPatamar: { instalacoes: number; bonus: number } | null;
-  faltamProximo: number;
-  progresso: number;
-  tabelaAplicada: string;
-  patamares: { instalacoes: number; bonus: number }[];
-}
-
-/**
- * Gera o resumo completo do supervisor
+ * Gera o resumo completo do supervisor.
+ *
+ * IMPORTANTE: só conta instalações de técnicos com ≥12 dias trabalhados.
  */
 export function gerarResumoSupervisor(
   nome: string,
   dias: DiaTecnico[]
 ): ResumoSupervisor {
-  const tecnicosUnicos = new Set(dias.map((d) => d.tecnico));
-  const tecnicosTotais = tecnicosUnicos.size;
+  // 1. Analisar cada técnico
+  const rankingInterno = analisarTecnicos(dias);
 
-  const tecnicosProdutivos = contarTecnicosProdutivos(dias);
+  // 2. Separar produtivos e não produtivos
+  const produtivos = rankingInterno.filter((t) => t.produtivo);
+  const naoProdutivos = rankingInterno.filter((t) => !t.produtivo);
 
-  const instalacoesTotais = dias.reduce((soma, d) => soma + d.instalacoes, 0);
+  const emailsProdutivos = new Set(produtivos.map((t) => t.email));
 
+  // 3. Somar instalações APENAS dos produtivos
+  const instalacoesTotais = produtivos.reduce(
+    (soma, t) => soma + t.instalacoes,
+    0
+  );
+
+  const instalacoesExcluidas = naoProdutivos.reduce(
+    (soma, t) => soma + t.instalacoes,
+    0
+  );
+
+  // 4. Calcular bónus
   const resultado = calcularBonusSupervisor(
     instalacoesTotais,
-    tecnicosProdutivos
+    produtivos.length
   );
 
   return {
     nome,
-    tecnicosProdutivos,
-    tecnicosTotais,
+    tecnicosProdutivos: produtivos.length,
+    tecnicosTotais: rankingInterno.length,
     instalacoesTotais,
+    instalacoesExcluidas,
     bonus: resultado.bonus,
     patamarAtingido: resultado.patamarAtingido,
     proximoPatamar: resultado.proximoPatamar,
@@ -202,5 +240,6 @@ export function gerarResumoSupervisor(
     progresso: resultado.progresso,
     tabelaAplicada: resultado.tabela.label,
     patamares: resultado.tabela.patamares,
+    rankingInterno,
   };
 }

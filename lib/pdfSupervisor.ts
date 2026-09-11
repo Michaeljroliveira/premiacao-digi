@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DiaTecnico } from "@/lib/rewards";
-import { gerarResumoSupervisor } from "@/lib/supervisores";
+import { gerarResumoSupervisor, MIN_DIAS_PRODUTIVO } from "@/lib/supervisores";
 
 const CORES = {
   azulEscuro: [26, 26, 46] as [number, number, number],
@@ -14,54 +14,18 @@ const CORES = {
   verdeFundo: [212, 237, 218] as [number, number, number],
   verdeTexto: [21, 87, 36] as [number, number, number],
   vermelho: [220, 53, 69] as [number, number, number],
+  vermelhoFundo: [248, 215, 218] as [number, number, number],
+  vermelhoTexto: [114, 28, 36] as [number, number, number],
   cinzaTexto: [108, 117, 125] as [number, number, number],
   cinzaClaro: [233, 236, 239] as [number, number, number],
   branco: [255, 255, 255] as [number, number, number],
 };
-
-function limparTexto(texto: string): string {
-  return texto
-    .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
-    .replace(/[\u{2600}-\u{27BF}]/gu, "")
-    .replace(/[\u{1F000}-\u{1F2FF}]/gu, "")
-    .trim();
-}
 
 export function exportarSupervisorPDF(
   nomeSupervisor: string,
   dias: DiaTecnico[]
 ) {
   const resumo = gerarResumoSupervisor(nomeSupervisor, dias);
-
-  // Ranking interno dos técnicos
-  const tecnicosMap = new Map<
-    string,
-    { instalacoes: number; dias: number; premio: number }
-  >();
-
-  for (const dia of dias) {
-    if (!tecnicosMap.has(dia.tecnico)) {
-      tecnicosMap.set(dia.tecnico, { instalacoes: 0, dias: 0, premio: 0 });
-    }
-    const t = tecnicosMap.get(dia.tecnico)!;
-    t.instalacoes += dia.instalacoes;
-    t.dias += 1;
-    t.premio += dia.premio;
-  }
-
-  const ranking = Array.from(tecnicosMap.entries())
-    .map(([email, dados]) => ({
-      email,
-      nome: email
-        .split("@")[0]
-        .replace(/\./g, " ")
-        .split(" ")
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(" "),
-      ...dados,
-      produtivo: dados.dias >= 12,
-    }))
-    .sort((a, b) => b.instalacoes - a.instalacoes);
 
   const pdf = new jsPDF({ format: "a4", unit: "mm" });
   const pageWidth = 210;
@@ -86,7 +50,7 @@ export function exportarSupervisorPDF(
   pdf.setLineWidth(0.5);
   pdf.line(margin, 27, margin + 40, 27);
 
-  // ============ NOME DO SUPERVISOR ============
+  // ============ NOME ============
   let y = 45;
 
   pdf.setTextColor(...CORES.cinzaTexto);
@@ -104,7 +68,7 @@ export function exportarSupervisorPDF(
   pdf.setTextColor(...CORES.cinzaTexto);
   pdf.text(`Tabela aplicada: ${resumo.tabelaAplicada}`, margin, y + 9);
 
-  // ============ RESUMO EM CARDS ============
+  // ============ CARDS RESUMO ============
   y = 70;
   pdf.setDrawColor(...CORES.cinzaClaro);
   pdf.setLineWidth(0.3);
@@ -118,10 +82,26 @@ export function exportarSupervisorPDF(
   y = y + 14;
 
   const cards = [
-    { label: "Tecnicos Produtivos", valor: resumo.tecnicosProdutivos, cor: CORES.azulDIGI },
-    { label: "Instalacoes Totais", valor: resumo.instalacoesTotais, cor: CORES.verde },
-    { label: "Patamar Atingido", valor: resumo.patamarAtingido, cor: CORES.ambar },
-    { label: "Bonus Atual", valor: `€ ${resumo.bonus}`, cor: CORES.verde },
+    {
+      label: "Tecnicos Produtivos",
+      valor: `${resumo.tecnicosProdutivos}/${resumo.tecnicosTotais}`,
+      cor: CORES.azulDIGI,
+    },
+    {
+      label: "Instalacoes Validas",
+      valor: resumo.instalacoesTotais,
+      cor: CORES.verde,
+    },
+    {
+      label: "Patamar Atingido",
+      valor: `${resumo.patamarAtingido}/3`,
+      cor: CORES.ambar,
+    },
+    {
+      label: "Bonus Atual",
+      valor: `€ ${resumo.bonus}`,
+      cor: CORES.verde,
+    },
   ];
 
   const boxWidth = (contentWidth - 9) / 4;
@@ -138,15 +118,41 @@ export function exportarSupervisorPDF(
     pdf.text(item.label, x + boxWidth / 2, y + 8, { align: "center" });
 
     pdf.setTextColor(...item.cor);
-    pdf.setFontSize(14);
+    pdf.setFontSize(13);
     pdf.setFont("helvetica", "bold");
     pdf.text(String(item.valor), x + boxWidth / 2, y + 16, {
       align: "center",
     });
   });
 
+  // ============ AVISO EXCLUSAO ============
+  if (resumo.instalacoesExcluidas > 0) {
+    y = y + 26;
+    pdf.setFillColor(...CORES.vermelhoFundo);
+    pdf.roundedRect(margin, y, contentWidth, 12, 2, 2, "F");
+    pdf.setFillColor(...CORES.vermelho);
+    pdf.rect(margin, y, 1.5, 12, "F");
+
+    pdf.setTextColor(...CORES.vermelhoTexto);
+    pdf.setFontSize(8);
+    pdf.setFont("helvetica", "bold");
+    const excluidos = resumo.tecnicosTotais - resumo.tecnicosProdutivos;
+    pdf.text(
+      `${excluidos} tecnico(s) excluido(s) - menos de ${MIN_DIAS_PRODUTIVO} dias trabalhados`,
+      margin + 5,
+      y + 5
+    );
+    pdf.setFont("helvetica", "normal");
+    pdf.text(
+      `${resumo.instalacoesExcluidas} instalacoes nao contam para o bonus`,
+      margin + 5,
+      y + 9
+    );
+    y += 4;
+  }
+
   // ============ PROGRESSO DOS PATAMARES ============
-  y = y + 28;
+  y = y + 20;
   pdf.setTextColor(...CORES.azulEscuro);
   pdf.setFontSize(10);
   pdf.setFont("helvetica", "bold");
@@ -155,19 +161,12 @@ export function exportarSupervisorPDF(
   y = y + 8;
   resumo.patamares.forEach((p, i) => {
     const atingido = i < resumo.patamarAtingido;
-    const atual = i === resumo.patamarAtingido - 1;
 
-    // Linha do patamar
-    pdf.setFillColor(
-      ...(atingido ? CORES.verdeFundo : CORES.azulClaro)
-    );
+    pdf.setFillColor(...(atingido ? CORES.verdeFundo : CORES.azulClaro));
     pdf.roundedRect(margin, y, contentWidth, 10, 1, 1, "F");
 
     if (atingido) {
       pdf.setFillColor(...CORES.verde);
-      pdf.rect(margin, y, 1.5, 10, "F");
-    } else if (atual) {
-      pdf.setFillColor(...CORES.ambar);
       pdf.rect(margin, y, 1.5, 10, "F");
     }
 
@@ -195,7 +194,7 @@ export function exportarSupervisorPDF(
     y += 12;
   });
 
-  // Info "falta X para próximo patamar"
+  // Info proximo patamar
   if (resumo.proximoPatamar) {
     y += 2;
     pdf.setFillColor(...CORES.ambarFundo);
@@ -230,7 +229,7 @@ export function exportarSupervisorPDF(
     y += 16;
   }
 
-  // ============ RANKING DA EQUIPA (nova pagina) ============
+  // ============ RANKING (nova pagina) ============
   pdf.addPage();
   y = 20;
 
@@ -243,50 +242,60 @@ export function exportarSupervisorPDF(
   pdf.setLineWidth(0.5);
   pdf.line(margin, y + 2, margin + 30, y + 2);
 
-  y = y + 10;
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(...CORES.cinzaTexto);
+  pdf.text(
+    `Apenas tecnicos com >= ${MIN_DIAS_PRODUTIVO} dias contam para o bonus`,
+    margin,
+    y + 7
+  );
+
+  y = y + 12;
 
   autoTable(pdf, {
     startY: y,
-    head: [["#", "Tecnico", "Dias", "Instalacoes", "Premio", "Status"]],
-    body: ranking.map((t, i) => [
+    head: [["#", "Tecnico", "Dias", "Instalacoes", "Status"]],
+    body: resumo.rankingInterno.map((t, i) => [
       String(i + 1),
       t.nome,
       String(t.dias),
       String(t.instalacoes),
-      `€ ${t.premio.toFixed(2)}`,
-      t.produtivo ? "Produtivo" : "Nao produtivo",
+      t.produtivo
+        ? "Produtivo"
+        : `Nao conta (<${MIN_DIAS_PRODUTIVO} dias)`,
     ]),
     theme: "striped",
     styles: {
-      fontSize: 8,
-      cellPadding: 2.5,
+      fontSize: 9,
+      cellPadding: 3,
       textColor: CORES.azulEscuro,
     },
     headStyles: {
       fillColor: CORES.azulEscuro,
       textColor: CORES.branco,
       fontStyle: "bold",
-      fontSize: 8,
+      fontSize: 9,
     },
     alternateRowStyles: {
       fillColor: CORES.azulClaro,
     },
     columnStyles: {
       0: { halign: "center", cellWidth: 10 },
-      1: { cellWidth: 60, fontStyle: "bold" },
-      2: { halign: "center", cellWidth: 15 },
-      3: { halign: "center", cellWidth: 25 },
-      4: { halign: "right", cellWidth: 30, fontStyle: "bold" },
-      5: { halign: "center", cellWidth: 30 },
+      1: { cellWidth: 65, fontStyle: "bold" },
+      2: { halign: "center", cellWidth: 20 },
+      3: { halign: "center", cellWidth: 30 },
+      4: { halign: "center", cellWidth: 55 },
     },
     didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 5) {
+      if (data.section === "body" && data.column.index === 4) {
         const text = String(data.cell.raw);
         if (text === "Produtivo") {
           data.cell.styles.textColor = CORES.verdeTexto;
           data.cell.styles.fontStyle = "bold";
         } else {
           data.cell.styles.textColor = CORES.vermelho;
+          data.cell.styles.fontStyle = "bold";
         }
       }
     },

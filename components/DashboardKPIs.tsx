@@ -30,15 +30,6 @@ export default function DashboardKPIs({
 }: DashboardKPIsProps) {
   const [modalAberto, setModalAberto] = useState(false);
 
-  function abrirModal() {
-    console.log("Click no card ignorados! Total:", ignorados.length);
-    if (ignorados.length > 0) {
-      setModalAberto(true);
-    } else {
-      alert("Nenhuma WO ignorada nesta planilha.");
-    }
-  }
-
   return (
     <>
       <section className="mt-8">
@@ -51,93 +42,41 @@ export default function DashboardKPIs({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <KpiCard titulo="👷 Técnicos" valor={totalTecnicos} />
-
-          <KpiCard titulo="📄 Serviços" valor={totalServicos} />
-
-          <KpiCard titulo="✅ Instalações" valor={totalInstalacoes} />
-
-          {/* Card Ignorados - BOTÃO DIRETO */}
+        {/* BOTÃO DE TESTE — super visível */}
+        <div style={{ marginBottom: "20px", padding: "20px", background: "#fef3c7", borderRadius: "10px" }}>
           <button
-            type="button"
-            onClick={abrirModal}
+            onClick={() => {
+              alert(`IGNORADOS: ${ignorados.length}`);
+              setModalAberto(true);
+            }}
             style={{
-              background: "white",
-              border: "1px solid #e5e7eb",
-              borderRadius: "16px",
-              padding: "24px",
-              textAlign: "left",
+              background: "#dc2626",
+              color: "white",
+              padding: "20px 40px",
+              fontSize: "18px",
+              fontWeight: "bold",
+              border: "none",
+              borderRadius: "10px",
               cursor: "pointer",
-              boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "scale(1.03)";
-              e.currentTarget.style.boxShadow =
-                "0 10px 15px -3px rgba(220,38,38,0.3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "scale(1)";
-              e.currentTarget.style.boxShadow =
-                "0 4px 6px -1px rgba(0,0,0,0.1)";
             }}
           >
-            <p
-              style={{
-                color: "#6b7280",
-                fontSize: "14px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span>🚫 Ignorados</span>
-              <span
-                style={{
-                  fontSize: "10px",
-                  background: "#fee2e2",
-                  color: "#991b1b",
-                  padding: "2px 8px",
-                  borderRadius: "12px",
-                  fontWeight: "bold",
-                }}
-              >
-                VER DETALHES →
-              </span>
-            </p>
-            <h2
-              style={{
-                fontSize: "36px",
-                fontWeight: "bold",
-                marginTop: "16px",
-                color: "#dc2626",
-              }}
-            >
-              {totalIgnorados}
-            </h2>
+            🚫 CLIQUE AQUI PARA VER IGNORADOS ({ignorados.length})
           </button>
+        </div>
 
-          <KpiCard
-            titulo="💰 Prêmio Total (€)"
-            valor={`€ ${premioTotal}`}
-          />
-
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <KpiCard titulo="👷 Técnicos" valor={totalTecnicos} />
+          <KpiCard titulo="📄 Serviços" valor={totalServicos} />
+          <KpiCard titulo="✅ Instalações" valor={totalInstalacoes} />
+          <KpiCard titulo="🚫 Ignorados" valor={totalIgnorados} />
+          <KpiCard titulo="💰 Prêmio Total (€)" valor={`€ ${premioTotal}`} />
           <KpiCard
             titulo="🎯 Potencial Adicional (€)"
             valor={`€ ${potencialAdicional}`}
             destaque="laranja"
           />
-
-          <KpiCard
-            titulo="📅 Dias Trabalhados"
-            valor={diasTrabalhados}
-          />
-
-          <KpiCard
-            titulo="🏆 Dias Premiados"
-            valor={diasPremiados}
-          />
+          <KpiCard titulo="📅 Dias Trabalhados" valor={diasTrabalhados} />
+          <KpiCard titulo="🏆 Dias Premiados" valor={diasPremiados} />
         </div>
       </section>
 

@@ -132,6 +132,7 @@ export default function Home() {
             potencialAdicional={estatisticas.potencialAdicional}
             diasTrabalhados={estatisticas.diasTrabalhados}
             diasPremiados={estatisticas.diasPremiados}
+            ignorados={resumo.ignorados}
           />
         )}
 
